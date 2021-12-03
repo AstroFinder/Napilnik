@@ -21,8 +21,10 @@ namespace Napilnik
             if (damage < 0)
                 throw new ArgumentOutOfRangeException(nameof(damage));
 
-            if (IsAlive)
-                Health -= damage;
+            if (IsAlive == false)
+                throw new InvalidOperationException();
+
+            Health -= damage;
         }
     }
 
