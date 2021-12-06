@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -8,20 +8,26 @@ namespace Napilnik
     {
         static void Main(string[] args)
         {
-            Warehouse warehouse = new Warehouse(100);
+            ConsoleWritter writter = new ConsoleWritter();
 
             Good iPhone12 = new Good("IPhone 12");
             Good iPhone11 = new Good("IPhone 11");
 
+            Warehouse warehouse = new Warehouse();
+
+            Shop shop = new Shop(warehouse);
+
             warehouse.Ship(iPhone12, 10);
             warehouse.Ship(iPhone11, 1);
 
-            Shop shop = new Shop(warehouse);
+            writter.DisplayGoods(warehouse.Goods);
 
             Cart cart = shop.Cart();
 
             cart.Add(iPhone12, 4);
             cart.Add(iPhone11, 3);
+
+            writter.DisplayGoods(cart.Goods);
 
             Console.WriteLine(cart.Order().Paylink);
 
@@ -43,47 +49,6 @@ namespace Napilnik
         public Cart Cart() => new Cart(_warehouse);
     }
 
-    public class Cart
-    {
-        private readonly List<Cell> _cells;
-        private readonly Warehouse _warehouse;
-
-        public Cart(Warehouse warehouse)
-        {
-            _warehouse = warehouse ?? throw new ArgumentNullException(nameof(warehouse));
-            _cells = new List<Cell>();
-        }
-
-        public IReadOnlyList<IReadOnlyCell> Cells => _cells;
-
-        public void Add(Good good, int count)
-        {
-            bool result = _warehouse.TryGetGood(good, count);
-
-            if (result == false)
-                throw new InvalidOperationException();
-
-            var newCell = new Cell(good, count);
-
-            int cellIndex = _cells.FindIndex(cell => cell.Good == good);
-
-            if (cellIndex == -1)
-                _cells.Add(newCell);
-            else
-                _cells[cellIndex].Merge(newCell);
-        }
-
-        public Order Order()
-        {
-            if (Cells.Count <= 0)
-                throw new ArgumentOutOfRangeException();
-
-            _warehouse.Send(this);
-
-            return new Order();
-        }
-    }
-
     public class Order
     {
         public string Paylink { get; private set; }
@@ -94,103 +59,80 @@ namespace Napilnik
         }
     }
 
-    public class Warehouse
+    public abstract class Storage
     {
-        private readonly List<Cell> _cells;
+        private readonly Dictionary<string, int> _goods;
 
-        public Warehouse(int maxCapacity)
+        public Storage()
         {
-            _cells = new List<Cell>();
-            MaxСapacity = maxCapacity;
+            _goods = new Dictionary<string, int>();
         }
 
-        public IReadOnlyList<IReadOnlyCell> Places => _cells;
+        public IReadOnlyDictionary<string, int> Goods => _goods;
 
-        public int MaxСapacity { get; private set; }
-
-        public int CurrentCapacity => _cells.Sum(cell => cell.Count);
-
-        public void Ship(Good good, int count)
+        public virtual void Ship(Good good, int count)
         {
-            var newCell = new Cell(good, count);
+            good = good ?? throw new ArgumentNullException(nameof(good));
 
-            if (CurrentCapacity + newCell.Count > MaxСapacity)
-                throw new InvalidOperationException();
+            if (count <= 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            int cellIndex = _cells.FindIndex(cell => cell.Good == good);
-
-            if (cellIndex == -1)
-                _cells.Add(newCell);
+            if (_goods.TryGetValue(good.Name, out int value))
+                _goods[good.Name] = value + count;
             else
-                _cells[cellIndex].Merge(newCell);
+                _goods.Add(good.Name, count);
         }
 
-        public void Send(Cart cart)
+        public virtual void Send(IReadOnlyDictionary<string, int> cart)
         {
-            for (int i = 0; i < cart.Cells.Count; i++)
+            cart = cart ?? throw new ArgumentNullException(nameof(cart));
+
+            foreach (var good in cart.Where(good => _goods.ContainsKey(good.Key)))
             {
-                IReadOnlyCell cartCell = cart.Cells[i];
-
-                if (cartCell.Count < 0)
+                if (_goods[good.Key] < good.Value)
                     throw new InvalidOperationException();
 
-                int cellIndex = _cells.FindIndex(cell => cell.Good == cartCell.Good);
-
-                if (cellIndex == -1)
-                    throw new InvalidOperationException();
-                else if (_cells[cellIndex].CanRemove)
-                    _cells[cellIndex].Remove(cartCell);
+                _goods[good.Key] -= good.Value;
             }
         }
 
-        public bool TryGetGood(Good good, int count)
+        public virtual bool TryGetGood(Good good, int count)
         {
-            return _cells.Any(cell => cell.Good == good && cell.Count >= count);
+            return _goods.Any(goods => goods.Key == good.Name && goods.Value >= count);
         }
     }
 
-    public class Cell : IReadOnlyCell
+    public class Cart : Storage
     {
-        public Good Good { get; private set; }
-        public int Count { get; private set; }
+        private readonly Warehouse _warehouse;
 
-        public Cell(Good good, int count)
+        public Cart(Warehouse warehouse)
         {
-
-            Good = good ?? throw new ArgumentNullException(nameof(good));
-
-            if (count < 0)
-                throw new ArgumentOutOfRangeException(nameof(count));
-
-            Count = count;
+            _warehouse = warehouse ?? throw new ArgumentNullException(nameof(warehouse));
         }
-
-        public bool CanRemove => Count > 0;
-
-        public void Merge(IReadOnlyCell newCell)
+        public void Add(Good good, int count)
         {
-            if (newCell.Good != Good)
-                throw new ArgumentOutOfRangeException();
+            bool result = _warehouse.TryGetGood(good, count);
 
-            Count += newCell.Count;
-        }
-
-        public void Remove(IReadOnlyCell newCell)
-        {
-            if (newCell.Good != Good)
-                throw new ArgumentOutOfRangeException();
-
-            if (CanRemove == false)
+            if (result == false)
                 throw new InvalidOperationException();
 
-            Count -= newCell.Count;
+            Ship(good, count);
+        }
+
+        public Order Order()
+        {
+            if (Goods.Count <= 0)
+                throw new ArgumentOutOfRangeException();
+
+            _warehouse.Send(Goods);
+
+            return new Order();
         }
     }
 
-    public interface IReadOnlyCell
+    public class Warehouse : Storage
     {
-        public Good Good { get; }
-        public int Count { get; }
     }
 
     public class Good
@@ -200,6 +142,21 @@ namespace Napilnik
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Name = name;
+        }
+    }
+
+    public class ConsoleWritter
+    {
+        public void DisplayGoods(IReadOnlyDictionary<string, int> goods)
+        {
+            goods = goods ?? throw new ArgumentNullException(nameof(goods));
+
+            foreach (var item in goods)
+            {
+                Console.Write($"Товар: {item.Key} - Остаток: {item.Value} \n");
+            }
+
+            Console.WriteLine();
         }
     }
 }
