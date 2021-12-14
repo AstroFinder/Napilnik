@@ -8,10 +8,10 @@ namespace Napilnik
     {
         static void Main(string[] args)
         {
-            Pathfinder fileLogWritter = new Pathfinder(ChainOfWritters.Create(new FileLogWritter()));
-            Pathfinder consoleLogWritter = new Pathfinder(ChainOfWritters.Create(new ConsoleLogWritter()));
-            Pathfinder fridayFileLogWritter = new Pathfinder(ChainOfWritters.Create(new FridayFileLogWritter()));
-            Pathfinder fridayConsoleLogWritter = new Pathfinder(ChainOfWritters.Create(new FridayConsoleLogWritter()));
+            Pathfinder fileLogWritter = new Pathfinder(new FileLogWritter());
+            Pathfinder consoleLogWritter = new Pathfinder(new ConsoleLogWritter());
+            Pathfinder fridayFileLogWritter = new Pathfinder(new FridayFileLogWritter());
+            Pathfinder fridayConsoleLogWritter = new Pathfinder(new FridayConsoleLogWritter());
             Pathfinder combinedLogWritter = new Pathfinder(ChainOfWritters.Create(new ConsoleLogWritter(), new FridayFileLogWritter()));
         }
     }
